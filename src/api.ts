@@ -1,15 +1,22 @@
 const apiBaseURL = 'http://127.0.0.1:8080/api/v1'
 
-export interface WorkoutSummary {
+export interface WorkoutRecord {
   id: string
   status: number
   started_at: string
   completed_at?: string
+}
+
+export interface WorkoutStat extends WorkoutRecord {
   duration_seconds?: number
   completed_exercise_count?: number
   completed_set_count?: number
   total_reps?: number
   total_volume_kg?: string
+}
+
+export interface UpdateWorkout {
+  status: 2 // 当前仅支持完成训练。
 }
 
 let accessToken = ''
@@ -44,14 +51,14 @@ export async function developmentLogin(): Promise<void> {
   accessToken = response.access_token
 }
 
-export function startWorkout(): Promise<WorkoutSummary> {
+export function createWorkout(): Promise<WorkoutRecord> {
   return request({ url: '/workouts', method: 'POST' })
 }
 
-export function completeWorkout(workoutID: string): Promise<WorkoutSummary> {
-  return request({ url: `/workouts/${workoutID}/complete`, method: 'POST' })
+export function updateWorkout(workoutID: string, data: UpdateWorkout): Promise<WorkoutRecord> {
+  return request({ url: `/workouts/${workoutID}`, method: 'PUT', data })
 }
 
-export function getWorkoutSummary(workoutID: string): Promise<WorkoutSummary> {
-  return request({ url: `/workouts/${workoutID}/summary`, method: 'GET' })
+export function getWorkoutStat(workoutID: string): Promise<WorkoutStat> {
+  return request({ url: `/workouts/${workoutID}/stat`, method: 'GET' })
 }

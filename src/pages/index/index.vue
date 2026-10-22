@@ -23,17 +23,17 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import {
-  completeWorkout,
+  updateWorkout,
   developmentLogin,
-  getWorkoutSummary,
-  startWorkout,
-  type WorkoutSummary,
+  getWorkoutStat,
+  createWorkout,
+  type WorkoutStat,
 } from '../../api'
 
 const title = ref('Stronger Your Body')
 const status = ref('等待开始')
 const busy = ref(false)
-const summary = ref<WorkoutSummary>()
+const summary = ref<WorkoutStat>()
 
 async function runEmptyWorkoutFlow() {
   busy.value = true
@@ -42,11 +42,11 @@ async function runEmptyWorkoutFlow() {
     status.value = '正在进行开发测试登录…'
     await developmentLogin()
     status.value = '正在开始训练…'
-    const workout = await startWorkout()
+    const workout = await createWorkout()
     status.value = '正在完成训练…'
-    await completeWorkout(workout.id)
+    await updateWorkout(workout.id, { status: 2 })
     status.value = '正在读取冻结总结…'
-    summary.value = await getWorkoutSummary(workout.id)
+    summary.value = await getWorkoutStat(workout.id)
     status.value = '闭环完成'
   } catch (error) {
     status.value = error instanceof Error ? error.message : String(error)
