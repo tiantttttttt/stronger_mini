@@ -110,20 +110,28 @@ export const ErrorCode = {
 } as const
 
 export class APIError extends Error {
-  constructor(public status: number, public code: number | null, message: string, public parameter?: string) {
+  constructor(public status: number, public code: number | null, message: string, public parameter?: string, public requestId?: string) {
     super(message)
     this.name = 'APIError'
   }
 }
 
-function parseAPIError(status: number, body: unknown): APIError {
+function parseAPIError(status: number, body: unknown, requestId?: string): APIError {
   const fallback = '请求失败，请稍后重试'
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return new APIError(status, null, fallback)
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return new APIError(status, null, fallback, undefined, requestId)
   const data = body as { code?: unknown; message?: unknown; parameter?: unknown }
-  if (typeof data.code !== 'number' || !Number.isSafeInteger(data.code)) return new APIError(status, null, fallback)
+  if (typeof data.code !== 'number' || !Number.isSafeInteger(data.code)) return new APIError(status, null, fallback, undefined, requestId)
   const message = typeof data.message === 'string' && data.message.trim() ? data.message : fallback
   const parameter = typeof data.parameter === 'string' ? data.parameter : undefined
-  return new APIError(status, data.code, message, parameter)
+  return new APIError(status, data.code, message, parameter, requestId)
+}
+
+function responseRequestId(headers: unknown): string | undefined {
+  if (!headers || typeof headers !== 'object') return undefined
+  for (const [name, value] of Object.entries(headers)) {
+    if (name.toLowerCase() === 'x-request-id' && typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return undefined
 }
 
 // 所有请求都有独立超时；认证迟到结果只用于尽力撤销，不再写入会话。
@@ -154,7 +162,7 @@ function send<T>(options: UniApp.RequestOptions, token?: string, onLateSuccess?:
           settled = true
           clearTimeout(timer)
           if (success) { resolve(response.data as T); return }
-          reject(parseAPIError(response.statusCode, response.data))
+          reject(parseAPIError(response.statusCode, response.data, responseRequestId(response.header)))
         },
         fail,
       })

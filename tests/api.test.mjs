@@ -89,3 +89,18 @@ test('未知数字码原样保留，缺失提示时安全兜底', async () => {
   const fallback = loadAPI(options => options.success({ statusCode: 400, data: { code: 990002 } }))
   await assert.rejects(fallback.getProfile(), error => error.code === 990002 && error.message === '请求失败，请稍后重试')
 })
+
+test('错误从响应头读取请求 ID，支持大小写和非 JSON 兜底', async () => {
+  for (const name of ['X-Request-ID', 'x-request-id', 'X-REQUEST-id']) {
+    for (const data of [{ code: 100001, message: '请求参数错误' }, '<html>gateway</html>']) {
+      const api = loadAPI(options => options.success({ statusCode: 400, data, header: { [name]: 'server-request' } }))
+      await assert.rejects(api.getProfile(), error => error.requestId === 'server-request' && error instanceof api.APIError)
+    }
+  }
+  for (const header of [undefined, {}, { 'X-Request-ID': '' }, { 'X-Request-ID': 123 }]) {
+    const api = loadAPI(options => options.success({ statusCode: 502, data: '', header }))
+    await assert.rejects(api.getProfile(), error => error.requestId === undefined)
+  }
+  const offline = loadAPI(options => options.fail(new Error('offline')))
+  await assert.rejects(offline.getProfile(), error => error.message === 'offline' && error.requestId === undefined)
+})

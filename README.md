@@ -21,3 +21,7 @@ pnpm run build:mp-weixin
 自动化测试使用模拟 uni API，验证调用契约、并发、超时与迟到响应；微信开发者工具和真机登录需要单独验收。
 
 错误码统一由 api.ts 导出的 ErrorCode 提供。APIError 保存 status、code（number 或 null）、message 和可选 parameter；业务判断使用 ErrorCode 常量，不匹配提示文案。未知整数码原样保留，网关 HTML、空响应、旧字符串码等使用 code=null 和本地通用提示，不触发自动刷新。后端与本客户端需同步升级数字错误码契约。
+
+## 请求错误定位
+
+`api.ts` 在错误响应中读取 `X-Request-ID`，保存在可选的 `APIError.requestId`。JSON 和网关非 JSON 错误都保留响应头 ID；网络失败或超时尚未收到响应时不生成 ID。反馈接口问题时可提供该 ID，服务端据此关联日志。刷新、重试和并发请求分别保留自身错误 ID，不修改成功数据和会话行为。

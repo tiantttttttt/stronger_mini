@@ -23,7 +23,7 @@ function fixture(saved) {
   })
   return {
     api: exports, calls, logins, saved: () => storage,
-    reply(index, status, data) { assert.ok(calls[index], `missing request ${index}`); calls[index].success({ statusCode: status, data }) },
+    reply(index, status, data, header) { assert.ok(calls[index], `missing request ${index}`); calls[index].success({ statusCode: status, data, header }) },
     fail(index) { calls[index].fail(new Error('network unavailable')) },
     expire() { const pending = [...timers.values()]; timers.clear(); for (const fn of pending) fn() },
   }
@@ -160,4 +160,36 @@ test('仅 HTTP 401 且业务码为访问凭证失效时触发刷新', async () =
     assert.equal(f.calls.length, 1)
     assert.equal(f.saved().user_id, 'old')
   }
+})
+
+test('刷新失败保留刷新请求 ID，重试失败保留重试请求 ID', async () => {
+  const failed = fixture(credentials()), first = outcome(failed.api.getProfile())
+  failed.reply(0, 401, { code: 100002, message: '请重新登录' }, { 'X-Request-ID': 'original' })
+  await flush()
+  failed.reply(1, 401, { code: 200002, message: '刷新凭证失效' }, { 'x-request-id': 'refresh' })
+  assert.equal((await first).error.requestId, 'refresh')
+  assert.equal(failed.calls.length, 2)
+
+  const retry = fixture(credentials()), second = outcome(retry.api.getProfile())
+  retry.reply(0, 401, { code: 100002, message: '请重新登录' }, { 'X-Request-ID': 'original' })
+  await flush()
+  retry.reply(1, 200, credentials('fresh'), { 'X-Request-ID': 'refresh' })
+  await flush()
+  retry.reply(2, 500, { code: 100999, message: '服务暂时不可用' }, { 'X-Request-ID': 'retry' })
+  assert.equal((await second).error.requestId, 'retry')
+  assert.equal(retry.calls.length, 3)
+})
+
+test('并发错误各自保留 ID，超时后的迟到响应不覆盖结果', async () => {
+  const f = fixture(), a = outcome(f.api.getProfile()), b = outcome(f.api.getProfile())
+  f.reply(1, 502, '', { 'X-Request-ID': 'second' })
+  f.reply(0, 400, { code: 100001, message: '请求参数错误' }, { 'X-Request-ID': 'first' })
+  assert.equal((await a).error.requestId, 'first')
+  assert.equal((await b).error.requestId, 'second')
+  const late = outcome(f.api.getProfile())
+  f.expire()
+  const result = await late
+  f.reply(2, 500, '', { 'X-Request-ID': 'late' })
+  assert.match(result.error.message, /timeout/)
+  assert.equal(result.error.requestId, undefined)
 })
